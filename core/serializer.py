@@ -4,15 +4,15 @@ from .models import *
 class UsersSerializer (serializers.ModelSerializer):
     class Meta:
         model = Users
-        fields = ('name', 'is_staff', 'is_visitor', 'is_criador')
+        fields = ('id','username', 'is_visitor', 'is_creator')
         
 class EventsSerializer (serializers.ModelSerializer):
     class Meta:
         model = Events
-        fields = ('name', 'date', 'local', 'max_capacity')
+        fields = ('id','name', 'date', 'local', 'max_capacity')
 
 class InscriptionSerializer (serializers.ModelSerializer):
     class Meta:
         model = Inscription
-        fields = ('event', 'user', 'is_active', 'reason')
+        fields = ('id','event', 'user', 'is_active')
 

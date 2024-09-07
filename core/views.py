@@ -2,6 +2,8 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from django.contrib.auth.models import User
 from django.http import JsonResponse
+from rest_framework.decorators import api_view
+
 from rest_framework.status import (
     HTTP_201_CREATED,
     HTTP_400_BAD_REQUEST,
@@ -9,8 +11,9 @@ from rest_framework.status import (
     HTTP_204_NO_CONTENT,
     HTTP_409_CONFLICT,
 )
+
 from django.utils import timezone
-from .models import (Events, Users, Inscription)
+from .models import *
 from .serializer import *
 
 
@@ -35,31 +38,29 @@ class UsersViewSet(viewsets.ModelViewSet):
                 status = HTTP_400_BAD_REQUEST
                 )
         
-        name=request.data.get('name')
-        is_istaff=request.data.get('is_staff')
-        is_creator=request.data.get('is_creator')
-        is_visitor=request.data.get('is_visitor')
+        name = request.data.get('name')
+        is_creator = request.data.get('is_creator')
+        is_visitor = request.data.get('is_visitor')
         
-        user = Users.objects.create(
-            name = name,
-            is_staff = is_istaff,
-            is_creator = is_creator,
-            is_visitor = is_visitor
-            )
-        
-        if is_istaff==True and is_creator==True and is_visitor==True:
+        if  is_creator == True and is_visitor == True:
             return JsonResponse(
-                'Escolha apenas um tipo de usuario',
+                'Desculpe, o usuario pode ter apenas um unico tipo',
                 status = HTTP_400_BAD_REQUEST
                 )
             
+        user = Users.objects.create(
+            username = name,
+            is_creator = is_creator,
+            is_visitor = is_visitor
+            )
+
         serializer = self.get_serializer(user)
         headers = self.get_success_headers(serializer.data)
         
         return JsonResponse(
             serializer.data,
-            status=HTTP_201_CREATED,
-            headers=headers
+            status = HTTP_201_CREATED,
+            headers = headers
             )
         
         
@@ -69,17 +70,30 @@ class EventsViewSet(viewsets.ModelViewSet):
     
     def list(self, request, *args, **kwargs):
         
-#exibir os detalhes completos de um evento,incluindo os inscritos e informações adicioanais.
+# exibir os detalhes completos de um evento,incluindo os inscritos e informações adicioanais.
 
-        events = Events.objects.all() 
+        events = Events.objects.all()
+        event_data = []
+        
         for event in events:
             inscritos = Inscription.objects.filter(
-                is_active = True, 
-                event = event ).count() 
-        
-                
-        serializer = EventsSerializer(events,inscritos,many = True)   
-        return JsonResponse(serializer.data, status = HTTP_200_OK)
+                is_active=True, 
+                event=event
+                ).count()
+            
+            id= event.id
+
+            event_data.append({
+                'id': id,
+                'name': event.name,
+                'date': event.date,
+                'local': event.local,
+                'max_capacity': event.max_capacity,
+                'is_active': inscritos,
+                })
+
+        serializer = EventsSerializer(event_data, many=True)
+        return JsonResponse(serializer.data, status=HTTP_200_OK)
     
     def create(self, request, *args, **kwargs): 
         
@@ -95,16 +109,16 @@ class EventsViewSet(viewsets.ModelViewSet):
                 status = HTTP_400_BAD_REQUEST 
                 )
 
-        name=request.data.get('name')
-        date_event=request.data.get('date_event')
-        time_event=request.data.get('time_event')
-        max_quantity=request.data.get('max_quantity')
+        name_event = request.data.get('name')
+        date_event = request.data.get('date')
+        local_event = request.data.get('local')
+        max_capacity = request.data.get('max_capacity')
 
         events = Events.objects.create(
-            name = name,
-            date_event = date_event,
-            time_event = time_event,
-            max_quantity = max_quantity,
+            name = name_event,
+            date = date_event,
+            local= local_event,
+            max_capacity = max_capacity,
         )
         
         serializer = self.get_serializer(events)
@@ -129,9 +143,9 @@ class EventsViewSet(viewsets.ModelViewSet):
         
     def destroy(self, request, pk):    
         
-        events = Events.objects.get(pk=pk)
-        events.delete()
-       
+        event = self.get_object()
+        event.delete()
+        
         return JsonResponse([], status=HTTP_204_NO_CONTENT)
     
     
@@ -141,7 +155,7 @@ class InscriptionViewSet(viewsets.ModelViewSet):
     
     def list(self, request, *args, **kwargs):
         
-        visitor = Events.objects.filter(user_type = 'visitante')
+        visitor = Users.objects.filter(is_visitor = True).first()
         if not visitor:
             return JsonResponse(
                     'somente o participante do evento pode acessar a \
@@ -154,7 +168,7 @@ class InscriptionViewSet(viewsets.ModelViewSet):
         
         return JsonResponse(serializer.data, status = HTTP_200_OK)
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request, ):
         
         data = request.data
         if not data:
@@ -165,49 +179,66 @@ class InscriptionViewSet(viewsets.ModelViewSet):
             
 #Endpoint para que os usuários possam se inscrever em eventos, respeitando a capacidade máxima do evento
 
-        event = Events.objects.get(pk = data['event'])
-        user = Users.objects.get(pk = data['user'])
+        events = Events.objects.get(pk = data['event'])
+        users = Users.objects.get(pk = data['user'])
         
-        iscription=Inscription.objects.create(
-            event = event,
-            user = user
-        )
-        if event.max_capacity > Events.objects(max_capacity=0):
-                event.max_capacity = event.max_capacity - 1
-                event.save()
+        #usuario inscrito no mesmo evento 
+        same_insc = Inscription.objects.filter(event=events, user=users).first()
+        if same_insc:
+            return JsonResponse(
+                'Você já está inscrito nesse evento.', 
+                status = HTTP_400_BAD_REQUEST
+                )
+        
+        #verificar se o evento ainda tem vagas
+        if  events.max_capacity > 0:
+            events.max_capacity -= 1
+            events.save()
+                
+            iscription = Inscription.objects.create(
+            event = events,
+            user = users
+            )
+        
+            serializer = self.get_serializer(iscription)
+            headers = self.get_success_headers(serializer.data)
+                
+            return JsonResponse(
+                'Inscrição realizada.',
+                status = HTTP_201_CREATED,
+                headers=headers
+                )
         else:
                 return JsonResponse(
                     'Desculpe, o evento esta lotado no momento.',
                     status = HTTP_409_CONFLICT
-                )
-        
-        serializer = self.get_serializer(iscription)
-        headers = self.get_success_headers(serializer.data)
-        
-        return JsonResponse(serializer.data, status = HTTP_201_CREATED, headers=headers)
-
-    def cancel(self,id_event,id_inscription):
+                )          
+                
+                
+    def cancel (self,request, id_event,id_inscription):
         
 #Endpoint para que os usuários possam cancelar suas inscrições em eventos, 
 #liberando vagas para outros interessados. 
 #O cancelamento só poderá ser feito em até 24h antes da data de realização do evento.
-
-        insc = Inscription.objects.get(pk = id_inscription)
-        insc.is_active = False
         
+        inscription = Inscription.objects.get(pk = id_inscription)
         event = Events.objects.get(pk = id_event)
+       
+        limit = timezone.timedelta( hours = 24 )
+        
+        if event.date - timezone.now() < limit:
+            return JsonResponse(
+                'O cancelamento só pode ser feito com pelo menos\
+                    24 horas de antecedência.', status=HTTP_409_CONFLICT)
+            
+        inscription.is_active = False
         event.max_capacity = event.max_capacity + 1
-        
-        if event.date - timezone.now() < timezone.timedelta(hours=24):
-            return JsonResponse({
-                'O cancelamento só pode ser feito com pelo menos 24 horas de antecedência.'
-            }, status= HTTP_409_CONFLICT)
-        
-        insc.save()
+         
+        inscription.save()
         event.save()
         
-        return JsonResponse('inscrção cancelada', status = HTTP_200_OK)
-
+        return JsonResponse('Sua inscrção foi cancelada', status = HTTP_200_OK)
+   
 
         
         

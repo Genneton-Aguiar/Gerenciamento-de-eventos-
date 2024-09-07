@@ -33,6 +33,7 @@ class Events (models.Model):
     )
     max_capacity = models.IntegerField(
         verbose_name = 'capacidade maxima',
+        
     )
     
     def __str__(self):
