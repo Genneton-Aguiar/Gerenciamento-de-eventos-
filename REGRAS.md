@@ -22,7 +22,7 @@ Autenticação e Autorização:
 
 Busca e Filtros:
 
-#Implementar filtros na listagem de eventos para que os usuários possam buscar eventos por intervalo data, local ou nome do evento.
+[CHECK] Implementar filtros na listagem de eventos para que os usuários possam buscar eventos por intervalo data, local ou nome do evento.
 
 Exportação de Dados (EXTRA):
 

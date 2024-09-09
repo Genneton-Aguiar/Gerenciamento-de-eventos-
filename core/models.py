@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 
 class Users (User):
@@ -24,8 +25,13 @@ class Events (models.Model):
         verbose_name = 'descrição do evento',
         max_length = 200
     )
-    date = models.DateTimeField(
-        verbose_name = 'data do evento',
+    start_date = models.DateTimeField(
+        verbose_name = 'data do inicio do evento',
+        default=timezone.now
+    )
+    end_date = models.DateTimeField(
+        verbose_name = 'data final do evento',
+        default=timezone.now
     )
     local = models.CharField(
         verbose_name = 'local do evento',
@@ -33,7 +39,6 @@ class Events (models.Model):
     )
     max_capacity = models.IntegerField(
         verbose_name = 'capacidade maxima',
-        
     )
     
     def __str__(self):

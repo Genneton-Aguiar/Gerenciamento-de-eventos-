@@ -2,8 +2,6 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from rest_framework.decorators import api_view
-
 from rest_framework.status import (
     HTTP_201_CREATED,
     HTTP_400_BAD_REQUEST,
@@ -69,12 +67,31 @@ class EventsViewSet(viewsets.ModelViewSet):
     serializer_class = EventsSerializer
     
     def list(self, request, *args, **kwargs):
-        
-# exibir os detalhes completos de um evento,incluindo os inscritos e informações adicioanais.
 
         events = Events.objects.all()
         event_data = []
         
+# Implementar filtros na listagem de eventos para que os usuários possam
+# buscar eventos por intervalo data, local ou nome do evento.  
+      
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        local = request.GET.get('local')
+        name = request.GET.get('name')
+        
+        if start_date and end_date:
+            events = events.filter(
+                start_date__gte = start_date,
+                end_date__lte = end_date
+                )
+        if local:
+            events = events.filter(local__icontains = local)
+        if name:
+            events = events.filter(name__icontains = name)
+        
+        
+# Exibir os detalhes completos de um evento,incluindo os inscritos 
+# e informações adicioanais.
         for event in events:
             inscritos = Inscription.objects.filter(
                 is_active=True, 
@@ -86,7 +103,9 @@ class EventsViewSet(viewsets.ModelViewSet):
             event_data.append({
                 'id': id,
                 'name': event.name,
-                'date': event.date,
+                'description': event.description,
+                'start_date': event.start_date,
+                'end_date': event.end_date,
                 'local': event.local,
                 'max_capacity': event.max_capacity,
                 'is_active': inscritos,
@@ -96,12 +115,13 @@ class EventsViewSet(viewsets.ModelViewSet):
         return JsonResponse(serializer.data, status=HTTP_200_OK)
     
     def create(self, request, *args, **kwargs): 
-        
-        # ESTUDAR O DECORATOR 
-        # METODO DE AUTENTICACAO JWT
-        # SOMENTE O USUARIO CRIADOR PODE CRIAR O ENVENTO...
-        
-        
+    
+        if not request.user.is_authenticated or not request.user.is_creator:
+            return JsonResponse(
+                'Desculpe, apenas os criadores de eventos podem criar eventos',
+                status = HTTP_400_BAD_REQUEST
+            )
+            
         data = request.data 
         if not data:
             return JsonResponse(
@@ -110,23 +130,33 @@ class EventsViewSet(viewsets.ModelViewSet):
                 )
 
         name_event = request.data.get('name')
-        date_event = request.data.get('date')
+        description_event = request.data.get('description')
+        start_date = request.data.get('start_date')
+        end_date = request.data.get('end_date')
         local_event = request.data.get('local')
         max_capacity = request.data.get('max_capacity')
 
         events = Events.objects.create(
             name = name_event,
-            date = date_event,
+            description = description_event,
+            start_date = start_date,
+            end_date = end_date,
             local= local_event,
             max_capacity = max_capacity,
         )
-        
+         
         serializer = self.get_serializer(events)
         headers = self.get_success_headers(serializer.data)
         
         return JsonResponse(serializer.data, status = HTTP_201_CREATED, headers=headers)
         
     def partial_update(self, request, pk): 
+       
+        if not request.user.is_authenticated or not request.user.is_creator:
+            return JsonResponse(
+                'Desculpe, apenas os criadores de eventos podem editar eventos',
+                status = HTTP_400_BAD_REQUEST
+            )
         
         try:
             events = Events.objects.get(pk=pk)
@@ -142,7 +172,11 @@ class EventsViewSet(viewsets.ModelViewSet):
             return JsonResponse(e, status=400)
         
     def destroy(self, request, pk):    
-        
+        if not request.user.is_authenticated or not request.user.is_creator:
+            return JsonResponse(
+                'Desculpe, apenas os criadores de eventos podem excluir eventos',
+                status = HTTP_400_BAD_REQUEST
+            )
         event = self.get_object()
         event.delete()
         
@@ -154,6 +188,12 @@ class InscriptionViewSet(viewsets.ModelViewSet):
     serializer_class = InscriptionSerializer
     
     def list(self, request, *args, **kwargs):
+        
+        if not request.user.is_authenticated or not request.user.is_visitor:
+            return JsonResponse(
+            'Desculpe, apenas os visitantes podem listar os eventos inscritos',
+            status = HTTP_400_BAD_REQUEST
+            )
         
         visitor = Users.objects.filter(is_visitor = True).first()
         if not visitor:
@@ -170,6 +210,12 @@ class InscriptionViewSet(viewsets.ModelViewSet):
 
     def create(self, request, ):
         
+        if not request.user.is_authenticated or not request.user.is_visitor:
+            return JsonResponse(
+                'Desculpe, apenas os visitantes podem se inscrever em eventos',
+                status = HTTP_400_BAD_REQUEST
+            )
+            
         data = request.data
         if not data:
             return JsonResponse(
@@ -214,13 +260,18 @@ class InscriptionViewSet(viewsets.ModelViewSet):
                     status = HTTP_409_CONFLICT
                 )          
                 
-                
+         
     def cancel (self,request, id_event,id_inscription):
         
 #Endpoint para que os usuários possam cancelar suas inscrições em eventos, 
 #liberando vagas para outros interessados. 
 #O cancelamento só poderá ser feito em até 24h antes da data de realização do evento.
-        
+
+        if not request.user.is_authenticated or not request.user.is_creator:
+            return JsonResponse(
+            'Desculpe,apenas os criadores de eventos podem cancelar inscrições',
+            status = HTTP_400_BAD_REQUEST
+            )
         inscription = Inscription.objects.get(pk = id_inscription)
         event = Events.objects.get(pk = id_event)
        
@@ -238,7 +289,3 @@ class InscriptionViewSet(viewsets.ModelViewSet):
         event.save()
         
         return JsonResponse('Sua inscrção foi cancelada', status = HTTP_200_OK)
-   
-
-        
-        

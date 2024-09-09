@@ -9,8 +9,9 @@ class UsersSerializer (serializers.ModelSerializer):
 class EventsSerializer (serializers.ModelSerializer):
     class Meta:
         model = Events
-        fields = ('id','name', 'date', 'local', 'max_capacity')
-
+        fields = ('id','name','description','start_date','end_date',
+                  'local','max_capacity')
+                  
 class InscriptionSerializer (serializers.ModelSerializer):
     class Meta:
         model = Inscription
